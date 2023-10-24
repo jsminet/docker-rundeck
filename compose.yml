@@ -1,0 +1,49 @@
+services:
+  traefik:
+    image: traefik:v2.10.4
+    ports:
+      # Exposes port 80 for incomming web requests
+      - 80:80
+      # The Web UI port http://0.0.0.0:8080 (enabled by --api.insecure=true)
+      - 8080:8080
+      - 1521:1521
+    volumes:
+      # So that Traefik can listen to the Docker events
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./app/traefik/conf/traefik.yml:/etc/traefik/traefik.yml
+
+  rundeck:
+    image: rundeck/rundeck:4.17.1
+    environment:
+      - RUNDECK_GRAILS_URL
+      - RUNDECK_DATABASE_DRIVER
+      - RUNDECK_DATABASE_DIALECT
+      - RUNDECK_DATABASE_USERNAME
+      - RUNDECK_DATABASE_PASSWORD
+      - RUNDECK_DATABASE_URL
+      - RUNDECK_DATABASE_VALIDATIONQUERY
+    labels:
+      - "traefik.enable=true"
+      - "traefik.http.routers.rundeck.rule=Host(`$RUNDECK_DNS`)"
+      - "traefik.http.routers.rundeck.entrypoints=web"
+      - "traefik.http.routers.rundeck.service=rundeck"
+      - "traefik.http.services.rundeck.loadbalancer.server.port=4440"
+    volumes:
+      - ./lib:/home/rundeck/server/lib
+    depends_on:
+      - oracle
+
+  oracle:
+    image: container-registry.oracle.com/database/express:21.3.0-xe
+    environment:
+        ORACLE_PWD: mypassword123
+    labels:
+      - "traefik.enable=true"
+      - "traefik.tcp.services.oracle.loadbalancer.server.port=1521"
+      - "traefik.tcp.routers.oracle.rule=HostSNI(`*`)"
+      - "traefik.tcp.routers.oracle.entrypoints=oracle"
+    volumes:
+      - dbdata:/opt/oracle/oradata
+
+volumes:
+    dbdata:
